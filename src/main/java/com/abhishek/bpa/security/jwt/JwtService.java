@@ -16,11 +16,12 @@ public class JwtService {
     private static final long EXPIRATION_TIME = 60 * 60 * 1000; // 1 HOUR
     private final Key key = Keys.secretKeyFor(SignatureAlgorithm.HS256);
 
-    public String generateToken(UUID userId, UUID organizationId, String email){
+    public String generateToken(UUID userId, UUID organizationId, String email, String role){
         return Jwts.builder()
                 .setSubject(userId.toString())
                 .claim("orgId", organizationId.toString())
                 .claim("email", email)
+                .claim("role", role)
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(System.currentTimeMillis() + EXPIRATION_TIME))
                 .signWith(key)
