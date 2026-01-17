@@ -1,8 +1,6 @@
 package com.abhishek.bpa.entity;
-
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Table;
+import com.abhishek.bpa.enums.Status;
+import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
@@ -32,6 +30,7 @@ public class Organization extends BaseEntity {
     @Column(name = "phone_number", length = 15, unique = true)
     private String phoneNumber;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private String status;
+    private Status status;
 }
