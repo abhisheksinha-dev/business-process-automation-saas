@@ -1,9 +1,8 @@
 package com.abhishek.bpa.entity;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
+import com.abhishek.bpa.enums.Role;
+import com.abhishek.bpa.enums.Status;
+import jakarta.persistence.*;
 import lombok.*;
 
 import java.util.UUID;
@@ -29,8 +28,15 @@ public class AppUser extends BaseEntity {
     @Column(length = 100)
     private String name;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private Role role;
+
     @Column(nullable = false, length = 100)
     private String email;
+
+    @Column(name = "password", nullable = false)
+    private String passwordHash;
 
     @Column(name = "country_code", nullable = false, length = 5)
     private String countryCode;
@@ -38,6 +44,7 @@ public class AppUser extends BaseEntity {
     @Column(name = "phone_number", nullable = false, length = 15)
     private String phoneNumber;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private String status;
+    private Status status;
 }
