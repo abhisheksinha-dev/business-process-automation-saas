@@ -1,14 +1,15 @@
 package com.abhishek.bpa.service;
 
 import com.abhishek.bpa.dto.auth.*;
+import com.abhishek.bpa.dto.common.ApiResponse;
+import org.springframework.http.ResponseEntity;
 
-import java.util.List;
 
 public interface AuthService {
 
-    SignUpResponseDto signUp(SignUpRequestDto request);
+    ResponseEntity<ApiResponse> signUp(SignUpRequestDto request);
 
-    LoginResponse login(LoginRequest request);
+    ResponseEntity<ApiResponse> login(LoginRequest request);
 
-    List<WorkSpaceResponseDto> getAllWorkSpacesByUserEmail(WorkspaceRequestDto request);
+    ResponseEntity<ApiResponse> getAllWorkSpacesByUserEmail(WorkspaceRequestDto request);
 }

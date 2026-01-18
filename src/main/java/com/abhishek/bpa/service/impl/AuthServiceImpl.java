@@ -1,21 +1,30 @@
 package com.abhishek.bpa.service.impl;
 
-import com.abhishek.bpa.constant.MessageConstant;
+import com.abhishek.bpa.constant.SuccessMessageConstant;
 import com.abhishek.bpa.dto.auth.*;
+import com.abhishek.bpa.dto.common.ApiResponse;
+import com.abhishek.bpa.dto.common.ResponseStatus;
 import com.abhishek.bpa.entity.AppUser;
 import com.abhishek.bpa.entity.Organization;
 import com.abhishek.bpa.enums.Role;
 import com.abhishek.bpa.enums.Status;
+import com.abhishek.bpa.exception.DuplicateDataException;
+import com.abhishek.bpa.exception.InactiveUserException;
+import com.abhishek.bpa.exception.InvalidCredentialsException;
+import com.abhishek.bpa.exception.InvalidWorkspaceException;
 import com.abhishek.bpa.repository.AppUserRepository;
 import com.abhishek.bpa.repository.OrganizationRepository;
 import com.abhishek.bpa.security.jwt.JwtService;
 import com.abhishek.bpa.service.AuthService;
 import com.abhishek.bpa.util.OrganizationCodeGenerator;
-import jakarta.transaction.Transactional;
+import com.abhishek.bpa.util.ResponseHelper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -30,7 +39,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional
-    public SignUpResponseDto signUp(SignUpRequestDto request) {
+    public ResponseEntity<ApiResponse> signUp(SignUpRequestDto request) {
 
         try{
             Organization organization = new Organization();
@@ -54,34 +63,44 @@ public class AuthServiceImpl implements AuthService {
 
             AppUser savedAppUser = appUserRepository.save(appUser);
 
-            return new SignUpResponseDto(
+            SignUpResponseDto data = new SignUpResponseDto(
                     savedOrganization.getName(),
                     savedOrganization.getCode(),
                     savedAppUser.getStatus()
             );
+
+            ResponseStatus status = ResponseHelper.success(HttpStatus.CREATED, SuccessMessageConstant.SIGNUP);
+
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body(ApiResponse.builder()
+                            .responseStatus(status)
+                            .data(data)
+                            .build()
+                    );
+
         } catch (DataIntegrityViolationException e) {
-            throw new RuntimeException(MessageConstant.SIGNUP_FAILED_DUPLICATE_DATA);
+            throw new DuplicateDataException();
         }
 
     }
 
     @Override
-    public LoginResponse login(LoginRequest request) {
+    public ResponseEntity<ApiResponse> login(LoginRequest request) {
 
         Organization organization = organizationRepository
                 .findByCode(request.getOrganizationCode())
-                .orElseThrow(() -> new RuntimeException(MessageConstant.INVALID_WORKSPACE));
+                .orElseThrow(InvalidWorkspaceException::new);
 
         AppUser user = appUserRepository
                 .findByEmailAndOrganizationId(request.getEmail().toLowerCase().trim(), organization.getId())
-                .orElseThrow(() -> new RuntimeException(MessageConstant.INVALID_CREDENTIALS));
+                .orElseThrow(InvalidCredentialsException::new);
 
         if (user.getStatus() != Status.ACTIVE){
-            throw new RuntimeException(MessageConstant.INACTIVE_USER);
+            throw new InactiveUserException();
         }
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())){
-            throw new RuntimeException(MessageConstant.INVALID_CREDENTIALS);
+            throw new InvalidCredentialsException();
         }
 
         String token = jwtService.generateToken(
@@ -91,18 +110,28 @@ public class AuthServiceImpl implements AuthService {
                 user.getRole().name()
         );
 
-        return new LoginResponse(token);
+        LoginResponse data = new LoginResponse(token);
+
+        ResponseStatus status = ResponseHelper.success(HttpStatus.OK, SuccessMessageConstant.LOGIN);
+
+        return ResponseEntity.ok(
+                ApiResponse.builder()
+                        .responseStatus(status)
+                        .data(data)
+                        .build()
+        );
     }
 
     @Override
-    public List<WorkSpaceResponseDto> getAllWorkSpacesByUserEmail(WorkspaceRequestDto request) {
+    @Transactional(readOnly = true)
+    public ResponseEntity<ApiResponse> getAllWorkSpacesByUserEmail(WorkspaceRequestDto request) {
 
         List<AppUser> users = appUserRepository.findAllByEmail(request.getEmail().toLowerCase().trim());
 
-        return users.stream()
+        List<WorkSpaceResponseDto> data =  users.stream()
                 .map(user -> {
                     Organization org = organizationRepository.findById(user.getOrganizationId())
-                            .orElseThrow(() -> new RuntimeException(MessageConstant.WORKSPACE_NOT_FOUND));
+                            .orElseThrow(InvalidWorkspaceException::new);
 
                     return new WorkSpaceResponseDto(
                             org.getName(),
@@ -110,5 +139,18 @@ public class AuthServiceImpl implements AuthService {
                     );
                 })
                 .toList();
+
+        String message = data.isEmpty()
+                ? SuccessMessageConstant.WORKSPACE_NOT_FOUND
+                : SuccessMessageConstant.WORKSPACES_FOUND;
+
+        ResponseStatus status = ResponseHelper.success(HttpStatus.OK, message);
+
+        return ResponseEntity.ok(
+                ApiResponse.builder()
+                        .responseStatus(status)
+                        .data(data)
+                        .build()
+        ) ;
     }
 }
