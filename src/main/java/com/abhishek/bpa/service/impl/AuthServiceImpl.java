@@ -19,6 +19,7 @@ import com.abhishek.bpa.service.AuthService;
 import com.abhishek.bpa.util.OrganizationCodeGenerator;
 import com.abhishek.bpa.util.ResponseHelper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -30,6 +31,7 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AuthServiceImpl implements AuthService {
 
     private final AppUserRepository appUserRepository;
@@ -43,13 +45,18 @@ public class AuthServiceImpl implements AuthService {
 
         String email = request.getEmail().toLowerCase().trim();
         String orgName = request.getOrganizationName().trim();
-        String orgCode = generateUniqueOrgCode(request.getOrganizationName());
+
+        log.info("Signup initiated for email={} organization={}", email, orgName);
 
         if (appUserRepository.existsByEmailAndOrganizationName(email, orgName)){
+            log.warn("Signup failed: email {} already exists in organization {}", email, orgName);
             throw new DuplicateDataException();
         }
 
         try{
+            String orgCode = generateUniqueOrgCode(request.getOrganizationName());
+            log.info("Generated organization code {} for {}", orgCode, orgName);
+
             Organization organization = new Organization();
 
             organization.setName(request.getOrganizationName().trim());
@@ -57,6 +64,7 @@ public class AuthServiceImpl implements AuthService {
             organization.setCode(orgCode);
 
             Organization savedOrganization = organizationRepository.save(organization);
+            log.info("Organization created with id={}", savedOrganization.getId());
 
             AppUser appUser = new AppUser();
 
@@ -70,6 +78,7 @@ public class AuthServiceImpl implements AuthService {
             appUser.setOrganizationId(savedOrganization.getId());
 
             AppUser savedAppUser = appUserRepository.save(appUser);
+            log.info("Admin user created with id={} for orgId={}", savedAppUser.getId(), savedOrganization.getId());
 
             SignUpResponseDto data = new SignUpResponseDto(
                     savedOrganization.getName(),
@@ -87,6 +96,7 @@ public class AuthServiceImpl implements AuthService {
                     );
 
         } catch (DataIntegrityViolationException e) {
+            log.warn("Signup failed due to DB constraint for email={} org={}", email, orgName, e);
             throw new DuplicateDataException();
         }
 
@@ -95,19 +105,32 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public ResponseEntity<ApiResponse> login(LoginRequest request) {
 
+        String email = request.getEmail().toLowerCase().trim();
+        String orgCode = request.getOrganizationCode();
+
+        log.info("Login attempt for email={} workspace={}", email, orgCode);
+
         Organization organization = organizationRepository
-                .findByCode(request.getOrganizationCode())
-                .orElseThrow(InvalidWorkspaceException::new);
+                .findByCode(orgCode)
+                .orElseThrow(() -> {
+                    log.warn("Login failed: invalid workspace code {}", orgCode);
+                    return new InvalidWorkspaceException();
+                });
 
         AppUser user = appUserRepository
-                .findByEmailAndOrganizationId(request.getEmail().toLowerCase().trim(), organization.getId())
-                .orElseThrow(InvalidCredentialsException::new);
+                .findByEmailAndOrganizationId(email, organization.getId())
+                .orElseThrow(() -> {
+                    log.warn("Login failed: user not found for email={} orgId={}", email, organization.getId());
+                    return new InvalidCredentialsException();
+                });
 
         if (user.getStatus() != Status.ACTIVE){
+            log.warn("Login blocked: inactive user id={} email={}", user.getId(), email);
             throw new InactiveUserException();
         }
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())){
+            log.warn("Login failed: invalid password for userId={}", user.getId());
             throw new InvalidCredentialsException();
         }
 
@@ -117,6 +140,8 @@ public class AuthServiceImpl implements AuthService {
                 user.getEmail(),
                 user.getRole().name()
         );
+
+        log.info("Login successful: userId={} orgId={}", user.getId(), user.getOrganizationId());
 
         LoginResponse data = new LoginResponse(token);
 
@@ -135,8 +160,20 @@ public class AuthServiceImpl implements AuthService {
     public ResponseEntity<ApiResponse> getAllWorkSpacesByUserEmail(WorkspaceRequestDto request) {
 
         String email = request.getEmail().toLowerCase().trim();
+        log.info("Fetching workspaces for email={}", email);
+
+        if (!appUserRepository.existsByEmail(email)) {
+            log.warn("Workspace fetch failed: user not found for email={}", email);
+            throw new InvalidCredentialsException();
+        }
 
         List<WorkSpaceView> workSpaces = appUserRepository.findWorkSpacesByEmail(email);
+
+        if (workSpaces.isEmpty()) {
+            log.warn("No workspaces found for email={}", email);
+        } else {
+            log.info("Found {} workspaces for email={}", workSpaces.size(), email);
+        }
 
         List<WorkSpaceResponseDto> data = workSpaces.stream()
                 .map(workspace -> new WorkSpaceResponseDto(workspace.name(), workspace.code()))
@@ -162,6 +199,7 @@ public class AuthServiceImpl implements AuthService {
         int counter = 1;
 
         while (organizationRepository.existsByCode(code)){
+            log.debug("Organization code {} already exists, trying next", code);
             code = base + "-" + counter;
             counter++;
         }
