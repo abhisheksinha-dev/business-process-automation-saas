@@ -37,4 +37,6 @@ public interface AppUserRepository extends JpaRepository<AppUser, UUID> {
     """
     )
     List<WorkSpaceView> findWorkSpacesByEmail(@Param("email") String email);
+
+    boolean existsByEmail(String email);
 }
