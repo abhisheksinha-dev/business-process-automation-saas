@@ -41,19 +41,27 @@ public class AuthServiceImpl implements AuthService {
     @Transactional
     public ResponseEntity<ApiResponse> signUp(SignUpRequestDto request) {
 
+        String email = request.getEmail().toLowerCase().trim();
+        String orgName = request.getOrganizationName().trim();
+        String orgCode = generateUniqueOrgCode(request.getOrganizationName());
+
+        if (appUserRepository.existsByEmailAndOrganizationName(email, orgName)){
+            throw new DuplicateDataException();
+        }
+
         try{
             Organization organization = new Organization();
 
-            organization.setName(request.getOrganizationName());
+            organization.setName(request.getOrganizationName().trim());
             organization.setStatus(Status.ACTIVE);
-            organization.setCode(OrganizationCodeGenerator.generate(request.getOrganizationName()));
+            organization.setCode(orgCode);
 
             Organization savedOrganization = organizationRepository.save(organization);
 
             AppUser appUser = new AppUser();
 
-            appUser.setName(request.getName());
-            appUser.setEmail(request.getEmail().toLowerCase().trim());
+            appUser.setName(request.getName().trim());
+            appUser.setEmail(email);
             appUser.setPasswordHash(passwordEncoder.encode(request.getPassword()));
             appUser.setRole(Role.ORG_ADMIN);
             appUser.setCountryCode(request.getCountryCode());
@@ -126,18 +134,12 @@ public class AuthServiceImpl implements AuthService {
     @Transactional(readOnly = true)
     public ResponseEntity<ApiResponse> getAllWorkSpacesByUserEmail(WorkspaceRequestDto request) {
 
-        List<AppUser> users = appUserRepository.findAllByEmail(request.getEmail().toLowerCase().trim());
+        String email = request.getEmail().toLowerCase().trim();
 
-        List<WorkSpaceResponseDto> data =  users.stream()
-                .map(user -> {
-                    Organization org = organizationRepository.findById(user.getOrganizationId())
-                            .orElseThrow(InvalidWorkspaceException::new);
+        List<WorkSpaceView> workSpaces = appUserRepository.findWorkSpacesByEmail(email);
 
-                    return new WorkSpaceResponseDto(
-                            org.getName(),
-                            org.getCode()
-                    );
-                })
+        List<WorkSpaceResponseDto> data = workSpaces.stream()
+                .map(workspace -> new WorkSpaceResponseDto(workspace.name(), workspace.code()))
                 .toList();
 
         String message = data.isEmpty()
@@ -152,5 +154,18 @@ public class AuthServiceImpl implements AuthService {
                         .data(data)
                         .build()
         ) ;
+    }
+
+    private String generateUniqueOrgCode(String orgName){
+        String base = OrganizationCodeGenerator.toSlug(orgName);
+        String code = base;
+        int counter = 1;
+
+        while (organizationRepository.existsByCode(code)){
+            code = base + "-" + counter;
+            counter++;
+        }
+
+        return code;
     }
 }

@@ -4,16 +4,11 @@ import java.util.UUID;
 
 public class OrganizationCodeGenerator {
 
-    public static String generate(String organizationName){
-        String slug = organizationName
+    public static String toSlug(String organizationName){
+        return organizationName
                 .toLowerCase()
+                .trim()
                 .replaceAll("[^a-z0-9]+", "-")
                 .replaceAll("(^-|-$)", "");
-
-        String random = UUID.randomUUID()
-                .toString()
-                .substring(0, 4);
-
-        return slug + "-" + random;
     }
 }
