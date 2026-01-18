@@ -4,8 +4,11 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
 import java.security.Key;
 import java.util.Date;
 import java.util.UUID;
@@ -13,8 +16,20 @@ import java.util.UUID;
 @Service
 public class JwtService {
 
-    private static final long EXPIRATION_TIME = 60 * 60 * 1000; // 1 HOUR
-    private final Key key = Keys.secretKeyFor(SignatureAlgorithm.HS256);
+    @Value("${jwt.secret}")
+    private String secret;
+
+    @Value("${jwt.expiration-ms}")
+    private long expirationMs;
+
+    private Key signingKey;
+
+    @PostConstruct
+    private void init(){
+        this.signingKey = Keys.hmacShaKeyFor(
+                secret.getBytes(StandardCharsets.UTF_8)
+        );
+    }
 
     public String generateToken(UUID userId, UUID organizationId, String email, String role){
         return Jwts.builder()
@@ -23,14 +38,14 @@ public class JwtService {
                 .claim("email", email)
                 .claim("role", role)
                 .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + EXPIRATION_TIME))
-                .signWith(key)
+                .setExpiration(new Date(System.currentTimeMillis() + expirationMs))
+                .signWith(signingKey, SignatureAlgorithm.HS256)
                 .compact();
     }
 
     public Claims extractClaims(String token){
         return Jwts.parserBuilder()
-                .setSigningKey(key)
+                .setSigningKey(signingKey)
                 .build()
                 .parseClaimsJws(token)
                 .getBody();
