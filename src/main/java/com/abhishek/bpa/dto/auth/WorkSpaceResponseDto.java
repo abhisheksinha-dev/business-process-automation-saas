@@ -1,13 +1,15 @@
 package com.abhishek.bpa.dto.auth;
 
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
 
+
 @Getter
 @Setter
-public class LoginRequest {
+@AllArgsConstructor
+public class WorkSpaceResponseDto {
 
-    private String email;
-    private String password;
+    private String organizationName;
     private String organizationCode;
 }
